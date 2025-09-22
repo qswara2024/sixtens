@@ -1,0 +1,249 @@
+import tkinter as tk
+from tkinter import messagebox
+import math
+import random
+
+SIZE = 6
+CELL_SIZE = 60  # ✅ Adjusted only the square size
+
+# 0 = Empty, 1 = Player 1 (Red), 2 = Computer (Blue)
+EMPTY, RED, BLUE = 0, 1, 2
+AI_DEPTH = 3  # Default AI depth
+
+def create_board():
+    return [[EMPTY for _ in range(SIZE)] for _ in range(SIZE)]
+
+def draw_board():
+    canvas.delete("all")
+    for r in range(SIZE):
+        for c in range(SIZE):
+            x1 = c * CELL_SIZE
+            y1 = r * CELL_SIZE
+            x2 = x1 + CELL_SIZE
+            y2 = y1 + CELL_SIZE
+            canvas.create_rectangle(x1, y1, x2, y2, outline="black", width=8)
+
+            if board[SIZE-1-r][c] == RED:
+                canvas.create_oval(x1+8, y1+8, x2-8, y2-8, fill="red")
+            elif board[SIZE-1-r][c] == BLUE:
+                canvas.create_oval(x1+8, y1+8, x2-8, y2-8, fill="blue")
+
+def insert_row(row):
+    global current_player
+    board[row].append(current_player)
+    board[row].pop(0)
+    draw_board()
+    switch_turn()
+
+def insert_col(col):
+    global current_player
+    col_vals = [board[r][col] for r in range(SIZE)]
+    col_vals.insert(0, current_player)
+    col_vals.pop()
+    for r in range(SIZE):
+        board[r][col] = col_vals[r]
+    draw_board()
+    switch_turn()
+
+def check_win(bd):
+    directions = [(1,0),(0,1),(1,1),(1,-1)]
+    for r in range(SIZE):
+        for c in range(SIZE):
+            player = bd[r][c]
+            if player == EMPTY:
+                continue
+            for dr, dc in directions:
+                count = 1
+                nr, nc = r+dr, c+dc
+                while 0 <= nr < SIZE and 0 <= nc < SIZE and bd[nr][nc] == player:
+                    count += 1
+                    if count >= 5:
+                        return True
+                    nr += dr
+                    nc += dc
+    return False
+
+def evaluate_board(bd):
+    score = 0
+    directions = [(1,0),(0,1),(1,1),(1,-1)]
+    for r in range(SIZE):
+        for c in range(SIZE):
+            player = bd[r][c]
+            if player == EMPTY:
+                continue
+            for dr, dc in directions:
+                count = 1
+                nr, nc = r+dr, c+dc
+                while 0 <= nr < SIZE and 0 <= nc < SIZE and bd[nr][nc] == player:
+                    count += 1
+                    nr += dr
+                    nc += dc
+                if player == BLUE:
+                    score += count**2
+                else:
+                    score -= count**2
+    return score
+
+def minimax(bd, depth, alpha, beta, maximizing):
+    if check_win(bd) or depth == 0:
+        return evaluate_board(bd)
+
+    if maximizing:  # Computer (Blue)
+        max_eval = -math.inf
+        for move in get_all_moves(bd, BLUE):
+            eval = minimax(move, depth-1, alpha, beta, False)
+            max_eval = max(max_eval, eval)
+            alpha = max(alpha, eval)
+            if beta <= alpha:
+                break
+        return max_eval
+    else:  # Player (Red)
+        min_eval = math.inf
+        for move in get_all_moves(bd, RED):
+            eval = minimax(move, depth-1, alpha, beta, True)
+            min_eval = min(min_eval, eval)
+            beta = min(beta, eval)
+            if beta <= alpha:
+                break
+        return min_eval
+
+def get_all_moves(bd, player):
+    moves = []
+    # Rows
+    for r in range(SIZE):
+        new_bd = [row[:] for row in bd]
+        new_bd[r].append(player)
+        new_bd[r].pop(0)
+        moves.append(new_bd)
+    # Columns
+    for c in range(SIZE):
+        new_bd = [row[:] for row in bd]
+        col_vals = [new_bd[i][c] for i in range(SIZE)]
+        col_vals.insert(0, player)
+        col_vals.pop()
+        for i in range(SIZE):
+            new_bd[i][c] = col_vals[i]
+        moves.append(new_bd)
+    return moves
+
+def computer_move():
+    global current_player
+    if current_player != BLUE:
+        return
+
+    best_score = -math.inf
+    best_move = None
+
+    # Try all possible moves
+    for move in get_all_moves(board, BLUE):
+        score = minimax(move, AI_DEPTH, -math.inf, math.inf, False)  # ✅ Use AI_DEPTH directly
+        if score > best_score:
+            best_score = score
+            best_move = move
+
+    if best_move:
+        for r in range(SIZE):
+            for c in range(SIZE):
+                board[r][c] = best_move[r][c]
+        switch_turn()
+
+def reset_game():
+    global board, current_player
+    board = create_board()
+    current_player = RED
+    draw_board()
+    turn_label.config(text="Turn: Player 1 (Red)")
+
+def set_ai_depth(depth):
+    global AI_DEPTH
+    AI_DEPTH = depth
+    depth_label.config(text=f"AI Depth = {AI_DEPTH}")
+
+# === GUI ===
+root = tk.Tk()
+root.title("Squares Game - Player vs Computer")
+
+canvas = tk.Canvas(root, width=SIZE*CELL_SIZE, height=SIZE*CELL_SIZE)
+canvas.grid(row=0, column=0, rowspan=SIZE, padx=10, pady=10)
+
+# Letters A-F right to each row
+LETTERS = ["A", "B", "C", "D", "E", "F"]
+for i, letter in enumerate(LETTERS):
+    btn = tk.Button(root, text=letter, font=("Consolas", 12), width=1, height=1,
+                    command=lambda r=i: insert_row(r))
+    btn.place(x=SIZE*CELL_SIZE + 40, y=(SIZE-1-i)*CELL_SIZE + CELL_SIZE//3)
+
+# Numbers 1-6 below each column (right to left)
+for i in range(SIZE):
+    btn = tk.Button(root, text=str(SIZE-i), font=("Consolas", 16), width=1, height=1,
+                    command=lambda c=i: insert_col(c))
+    btn.place(x=i*CELL_SIZE + CELL_SIZE//12, y=SIZE*CELL_SIZE +24)
+
+# Turn label
+turn_label = tk.Label(root, text="Turn: Player 1 (Red)", font=("Consolas", 16))
+turn_label.place(x=SIZE*CELL_SIZE//2 + 400, y=SIZE*CELL_SIZE  -320)
+
+# Reset button
+reset_btn = tk.Button(root, text="⟳ Reset Game", font=("Consolas", 16), command=reset_game)
+reset_btn.place(x=SIZE*CELL_SIZE//2 + 400, y=SIZE*CELL_SIZE + 10)
+
+# AI depth buttons
+btn_depth3 = tk.Button(root, text="AI Depth 3", font=("Consolas", 16), command=lambda: set_ai_depth(3))
+btn_depth3.place(x=SIZE*CELL_SIZE//2 +400, y=SIZE*CELL_SIZE - 100)
+
+btn_depth5 = tk.Button(root, text="AI Depth 5", font=("Consolas", 16), command=lambda: set_ai_depth(5))
+btn_depth5.place(x=SIZE*CELL_SIZE//2 + 400 , y=SIZE*CELL_SIZE - 40)
+
+# ✅ Label showing current AI depth
+depth_label = tk.Label(root, text=f"AI Depth = {AI_DEPTH}", font=("Consolas", 16))
+depth_label.place(x=SIZE*CELL_SIZE//2 + 400, y=SIZE*CELL_SIZE -280)
+
+# Start game
+board = create_board()
+current_player = RED
+draw_board()
+
+# ===================== [Add PvP mode] =====================
+game_mode = "pvc"  # Default vs computer
+
+def switch_turn():
+    global current_player
+    draw_board()
+    last_player = current_player
+    if check_win(board):
+        if game_mode == "pvp":
+            winner = "Player 1 (Red)" if last_player == RED else "Player 2 (Blue)"
+        else:
+            winner = "Player 1 (Red)" if last_player == RED else "Computer (Blue)"
+        messagebox.showinfo("Win", f"🎉 {winner} wins!")
+        return
+    else:
+        current_player = RED if current_player == BLUE else BLUE
+        if game_mode == "pvp":
+            turn_label.config(
+                text="Turn: Player 1 (Red)" if current_player == RED else "Turn: Player 2 (Blue)"
+            )
+        else:
+            turn_label.config(
+                text="Turn: Player 1 (Red)" if current_player == RED else "Turn: Computer (Blue)"
+            )
+            if current_player == BLUE:
+                root.after(500, computer_move)
+
+def set_game_mode(mode):
+    global game_mode
+    game_mode = mode
+    reset_game()
+    if mode == "pvp":
+        turn_label.config(text="Turn: Player 1 (Red)")
+    else:
+        turn_label.config(text="Turn: Player 1 (Red) vs Computer")
+        
+# Mode selection buttons
+btn_pvp = tk.Button(root, text="Two Players", font=("Consolas", 16), command=lambda: set_game_mode("pvp"))
+btn_pvp.place(x=SIZE*CELL_SIZE//2 + 400 , y=SIZE*CELL_SIZE - 220)
+
+btn_pvc = tk.Button(root, text="Player vs Computer", font=("Consolas", 16), command=lambda: set_game_mode("pvc"))
+btn_pvc.place(x=SIZE*CELL_SIZE//2 + 400 , y=SIZE*CELL_SIZE - 150)
+
+root.mainloop()
